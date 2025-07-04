@@ -18,6 +18,8 @@ DISPLAY_SIZE = (640, 480)  # Display size
 # Константа для вертикального смещения (пиксели)
 VERTICAL_SHIFT = 45     # 67 было
 
+# Константа для поворота правого изображения
+RIGHT_IMG_ROTATE = 0.0
 
 BASELINE = 0.08         # Расстояние между камерами в метрах
 MIN_DISP = 0            # Минимальная диспаратность
@@ -125,6 +127,54 @@ def apply_vertical_crop(image, delta_y, is_left_image):
             pad = np.zeros((trim_amount, width, 3), dtype=np.uint8)
             return np.vstack((image, pad))
 
+def rotate_image(image, angle):
+    """Поворачивает изображение на заданный угол (в градусах) с сохранением исходных размеров"""
+    (h, w) = image.shape[:2]
+    center = (w // 2, h // 2)
+    
+    # Получаем матрицу поворота
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    
+    # Рассчитываем новые размеры с учетом поворота
+    cos = np.abs(M[0, 0])
+    sin = np.abs(M[0, 1])
+    new_w = int(h * sin + w * cos)
+    new_h = int(h * cos + w * sin)
+    
+    # Корректируем матрицу поворота для сохранения центра
+    M[0, 2] += (new_w - w) // 2
+    M[1, 2] += (new_h - h) // 2
+    
+    # Выполняем поворот
+    rotated = cv2.warpAffine(
+        image, 
+        M, 
+        (new_w, new_h),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=(0, 0, 0)  # Черные границы
+    )
+    
+    # Вычисляем координаты для обрезки до исходного размера
+    start_x = (new_w - w) // 2
+    start_y = (new_h - h) // 2
+    end_x = start_x + w
+    end_y = start_y + h
+    
+    # Обрезаем центральную часть
+    cropped = rotated[start_y:end_y, start_x:end_x]
+    
+    # Если из-за округлений размеры не совпали - добавляем черные поля
+    if cropped.shape[0] != h or cropped.shape[1] != w:
+        result = np.zeros((h, w, 3), dtype=np.uint8)
+        y_offset = (h - cropped.shape[0]) // 2
+        x_offset = (w - cropped.shape[1]) // 2
+        result[y_offset:y_offset+cropped.shape[0], 
+               x_offset:x_offset+cropped.shape[1]] = cropped
+        return result
+    
+    return cropped
+
 def main():
     left_data = load_calibration_and_init_camera(CALIBRATION_FILE_LEFT, LEFT_CAMERA_ID)
     right_data = load_calibration_and_init_camera(CALIBRATION_FILE_RIGHT, RIGHT_CAMERA_ID)
@@ -171,7 +221,10 @@ def main():
                 # Применяется только при включённой калибровке
                 cropped_left = apply_vertical_crop(undistorted_left, VERTICAL_SHIFT, is_left_image=True)
                 cropped_right = apply_vertical_crop(undistorted_right, VERTICAL_SHIFT, is_left_image=False)
-        
+                
+                # Поворот правого изображения
+                cropped_right = rotate_image(cropped_right, RIGHT_IMG_ROTATE)
+                
                 # Агрессивная фильтрация шума
                 filtered_left = cv2.bilateralFilter(cropped_left, d=9, sigmaColor=150, sigmaSpace=150)
                 filtered_right = cv2.bilateralFilter(cropped_right, d=9, sigmaColor=150, sigmaSpace=150)
