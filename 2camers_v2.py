@@ -4,6 +4,10 @@ import sys
 import time
 import os
 
+from camera_calibration import invoke
+import viravnivanie_v1_2
+import count_rotate_v1
+
 def main():
     # Инициализация Pygame
     pygame.init()
@@ -82,7 +86,7 @@ def main():
 
     # Создание окна
     screen = pygame.display.set_mode((1280, 480))
-    pygame.display.set_caption("Двойной видеопоток - ПРОБЕЛ: сохранить снимки | ESC: выход")
+    pygame.display.set_caption("Двойной видеопоток - ПРОБЕЛ: сохранить снимки | ESC: выход | K - начать калибровку")
 
     # Счётчик для уникальных номеров
     counter = 0
@@ -122,6 +126,16 @@ def main():
                         counter += 1
                     except Exception as e:
                         print(f"Ошибка при сохранении изображений: {e}")
+                elif event.key == pygame.K_c:
+                    if counter >= 10:
+                        print("Вызов калибровок")
+                        invoke('captures', 'left_*.jpg', 'output_left', 'left', (7, 7), 2.65)
+                        invoke('captures', 'right_*.jpg', 'output_right', 'right', (7, 7), 2.65)
+                        viravnivanie_v1_2.main()
+                        count_rotate_v1.main()
+                    else:
+                        print("Недостаточно количества изображений для калибровки!\nНеобходимо минимум 10!")
+                        
 
         try:
             # Получение и отображение кадров

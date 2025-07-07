@@ -6,11 +6,12 @@ import pickle
 
 # Camera calibration parameters
 # You can modify these variables as needed
-CHESSBOARD_SIZE = (7, 7)  # Number of inner corners per chessboard row and column
-SQUARE_SIZE = 2.65         # Size of a square in centimeters
-CALIBRATION_IMAGES_PATH = 'calibration_images/*.jpg'  # Path to calibration images
-OUTPUT_DIRECTORY = 'output'  # Directory to save calibration results
-SAVE_UNDISTORTED = True   # Whether to save undistorted images
+CHESSBOARD_SIZE = (7, 7)  # Количество пересечений шахматной доски
+SQUARE_SIZE = 2.65         # Размер квадрата в санитиметрах
+CALIBRATION_IMAGES_PATH = 'calibration_images/*.jpg'  # Путь до изображений калибровки
+OUTPUT_DIRECTORY = 'output'  # Выходная директория
+SAVE_UNDISTORTED = True   # Сохранять выходные изображения?
+CALIBRATE_FILE_NAME = 'calibration_data.pkl'  # Для сохранения калибровочного файла из вне invoke()
 
 def calibrate_camera():
     """
@@ -95,7 +96,7 @@ def calibrate_camera():
         'reprojection_error': ret
     }
     
-    with open(os.path.join(OUTPUT_DIRECTORY, 'calibration_data.pkl'), 'wb') as f:
+    with open(os.path.join(OUTPUT_DIRECTORY, CALIBRATE_FILE_NAME), 'wb') as f:
         pickle.dump(calibration_data, f)
     
     # Save camera matrix and distortion coefficients as text files
@@ -196,6 +197,17 @@ def main():
     undistort_images(mtx, dist)
     
     print("Camera calibration completed successfully!")
+
+# Для вызова из вне
+def invoke(input_dir, name_files, output_dir, left_or_right, size_chessboard, size_square):
+    global CHESSBOARD_SIZE, SQUARE_SIZE, CALIBRATION_IMAGES_PATH, OUTPUT_DIRECTORY, SAVE_UNDISTORTED, CALIBRATE_FILE_NAME
+    CHESSBOARD_SIZE = size_chessboard                                       # Количество пересечений шахматной доски
+    SQUARE_SIZE = size_square                                               # Размер квадрата в санитиметрах
+    CALIBRATION_IMAGES_PATH = input_dir + '/' + name_files                  # Путь до изображений калибровки
+    OUTPUT_DIRECTORY = output_dir                                           # Выходная директория
+    SAVE_UNDISTORTED = True                                                 # Сохранять выходные изображения?
+    CALIBRATE_FILE_NAME = 'calibration_data' + '_' + left_or_right +'.pkl'  # Для сохранения калибровочного файла из вне invoke()
+    main()
 
 if __name__ == "__main__":
     main()

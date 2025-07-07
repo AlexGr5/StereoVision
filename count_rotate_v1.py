@@ -146,7 +146,7 @@ def calculate_angle(point1, point2):
     angle_rad = math.atan2(dy, dx)  # Учитывает все 4 четверти
     return math.degrees(angle_rad)
 
-if __name__ == "__main__":
+def main():
     captures_dir = "captures"
     aligned_dir = "aligned_rotated"
     os.makedirs(aligned_dir, exist_ok=True)
@@ -270,3 +270,6 @@ if __name__ == "__main__":
         print("\nНе удалось вычислить углы поворота для всех пар изображений")
     
     print("\nОбработка завершена. Результаты сохранены в папке 'aligned_rotated'.")
+    
+if __name__ == "__main__":
+    main()

@@ -177,7 +177,7 @@ def compute_vertical_offset(left_path, right_path, num_points=100, max_dim=800):
     
     return delta_y_real
 
-if __name__ == "__main__":
+def main():
     captures_dir = "captures"
     aligned_dir = "aligned"
     os.makedirs(aligned_dir, exist_ok=True)
@@ -257,3 +257,6 @@ if __name__ == "__main__":
             print(f"Ошибка при обрезке {left_path}: {str(e)}")
 
     print("\nОбработка завершена. Результаты сохранены в папке 'aligned'.")
+
+if __name__ == "__main__":
+    main()
