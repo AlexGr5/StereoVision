@@ -177,6 +177,11 @@ def compute_vertical_offset(left_path, right_path, num_points=100, max_dim=800):
     
     return delta_y_real
 
+def save_mediana(mediana, output_name):
+    with open(output_name, "w") as file:
+        file.write(str(mediana))
+        print(f'\nМедиана сохранена! Результат в {output_name}')
+
 def main():
     captures_dir = "captures"
     aligned_dir = "aligned"
@@ -222,6 +227,8 @@ def main():
     print(f"Среднее: {mean_offset:.2f} пикселей")
     print(f"Стандартное отклонение: {std_offset:.2f} пикселей")
     print(f"Общее количество пар: {len(offsets)}")
+    
+    save_mediana(median_offset, r'output/visota.txt')
 
     # Визуализация распределения смещений
     plt.figure(figsize=(10, 6))

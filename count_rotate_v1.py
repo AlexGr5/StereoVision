@@ -146,6 +146,11 @@ def calculate_angle(point1, point2):
     angle_rad = math.atan2(dy, dx)  # Учитывает все 4 четверти
     return math.degrees(angle_rad)
 
+def save_mediana(mediana, output_name):
+    with open(output_name, "w") as file:
+        file.write(str(mediana))
+        print(f'\nМедиана сохранена! Результат в {output_name}')
+
 def main():
     captures_dir = "captures"
     aligned_dir = "aligned_rotated"
@@ -266,6 +271,8 @@ def main():
         plt.savefig(os.path.join(aligned_dir, 'rotation_distribution.png'))
         #plt.close()
         print(f"График распределения углов поворота сохранен в {aligned_dir}/rotation_distribution.png")
+        
+        save_mediana(median_angle, r'output/rotate.txt')
     else:
         print("\nНе удалось вычислить углы поворота для всех пар изображений")
     

@@ -31,6 +31,24 @@ WINDOW_SIZE = 5        # Размер окна для совпадений
 min_depth = 0.3     # 0.1
 max_depth = 2.0     # 3.0
 
+def load_rotate_and_vertical_diff(rotete_file, vertical_diff_file):
+    """ Загрузка угла поворота правого изображения и разницы изображений по высоте из файлов"""
+    global VERTICAL_SHIFT,RIGHT_IMG_ROTATE
+    
+    angle = 0.0
+    with open(rotete_file, "r") as file:
+        angle = float(file.readline().strip())
+        
+    vertical = 0
+    with open(vertical_diff_file, "r") as file:
+        vertical = int(float(file.readline().strip()))
+        
+    # Константа для вертикального смещения (пиксели)
+    VERTICAL_SHIFT = vertical
+    # Константа для поворота правого изображения
+    RIGHT_IMG_ROTATE = angle
+    
+
 def set_camera_resolution(cap, desired_resolutions):
     """
     Attempts to set camera resolution from priority list.
@@ -178,6 +196,9 @@ def rotate_image(image, angle):
 def main():
     left_data = load_calibration_and_init_camera(CALIBRATION_FILE_LEFT, LEFT_CAMERA_ID)
     right_data = load_calibration_and_init_camera(CALIBRATION_FILE_RIGHT, RIGHT_CAMERA_ID)
+
+    # Закомментировать, если не нужно читать из файла, а использовать константы!
+    load_rotate_and_vertical_diff(r'output/rotate.txt', r'output/visota.txt')
 
     if left_data is None or right_data is None:
         if left_data and left_data['cap'].isOpened():
