@@ -264,7 +264,7 @@ def main():
         plt.legend()
         plt.grid(True)
         plt.savefig(os.path.join(aligned_dir, 'rotation_distribution.png'))
-        plt.close()
+        #plt.close()
         print(f"График распределения углов поворота сохранен в {aligned_dir}/rotation_distribution.png")
     else:
         print("\nНе удалось вычислить углы поворота для всех пар изображений")

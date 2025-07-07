@@ -16,7 +16,7 @@ DESIRED_RESOLUTIONS = [(1920, 1080), (1280, 720), (640, 480)]  # Priority resolu
 DISPLAY_SIZE = (640, 480)  # Display size
 
 # Константа для вертикального смещения (пиксели)
-VERTICAL_SHIFT = 45     # 67 было
+VERTICAL_SHIFT = 45     #
 
 # Константа для поворота правого изображения
 RIGHT_IMG_ROTATE = 0.0

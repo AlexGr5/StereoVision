@@ -129,8 +129,8 @@ def main():
                 elif event.key == pygame.K_c:
                     if counter >= 10:
                         print("Вызов калибровок")
-                        invoke('captures', 'left_*.jpg', 'output_left', 'left', (7, 7), 2.65)
-                        invoke('captures', 'right_*.jpg', 'output_right', 'right', (7, 7), 2.65)
+                        invoke('captures', 'left_*.jpg', 'output', 'left', (7, 7), 2.65)
+                        invoke('captures', 'right_*.jpg', 'output', 'right', (7, 7), 2.65)
                         viravnivanie_v1_2.main()
                         count_rotate_v1.main()
                     else:
