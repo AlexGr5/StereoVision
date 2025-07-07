@@ -8,6 +8,13 @@ from camera_calibration import invoke
 import viravnivanie_v1_2
 import count_rotate_v1
 
+#===========================================================================================================
+# ОБЯЗАТЕЛЬНО УКАЗАТЬ ВЕРНЫЕ ДАННЫЕ!
+# Константы для калибровки:
+CHESSBOARD_SIZE = (7, 7)    # Количество пересечений шахматной доски (на 1 меньше чем количество квадратов - если доска 8 на 8, то указываем 7 на 7)
+SQUARE_SIZE = 2.65          # Размер квадрата в санитиметрах
+#===========================================================================================================
+
 def main():
     # Инициализация Pygame
     pygame.init()
@@ -129,8 +136,8 @@ def main():
                 elif event.key == pygame.K_c:
                     if counter >= 10:
                         print("Вызов калибровок")
-                        invoke('captures', 'left_*.jpg', 'output', 'left', (7, 7), 2.65)
-                        invoke('captures', 'right_*.jpg', 'output', 'right', (7, 7), 2.65)
+                        invoke('captures', 'left_*.jpg', 'output', 'left', CHESSBOARD_SIZE, SQUARE_SIZE)
+                        invoke('captures', 'right_*.jpg', 'output', 'right', CHESSBOARD_SIZE, SQUARE_SIZE)
                         viravnivanie_v1_2.main()
                         count_rotate_v1.main()
                     else:
