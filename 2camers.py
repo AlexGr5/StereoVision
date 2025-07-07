@@ -5,8 +5,8 @@ import time
 import os
 
 from camera_calibration import invoke
-import viravnivanie_v1_2
-import count_rotate_v1
+import viravnivanie
+import count_rotate
 
 #===========================================================================================================
 # ОБЯЗАТЕЛЬНО УКАЗАТЬ ВЕРНЫЕ ДАННЫЕ!
