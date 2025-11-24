@@ -138,8 +138,8 @@ def main():
                         print("Вызов калибровок")
                         invoke('captures', 'left_*.jpg', 'output', 'left', CHESSBOARD_SIZE, SQUARE_SIZE)
                         invoke('captures', 'right_*.jpg', 'output', 'right', CHESSBOARD_SIZE, SQUARE_SIZE)
-                        viravnivanie_v1_2.main()
-                        count_rotate_v1.main()
+                        viravnivanie.main()
+                        count_rotate.main()
                     else:
                         print("Недостаточно количества изображений для калибровки!\nНеобходимо минимум 10!")
                         
@@ -186,3 +186,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
