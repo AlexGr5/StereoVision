@@ -52,8 +52,11 @@ try:
         depth_map = cv2.normalize(prediction, None, 0, 255, cv2.NORM_MINMAX)
         depth_map = 255 - depth_map.astype(np.uint8)
         
+        # Инвертируем цвета
+        depth_map_inverted = 255 - depth_map
+        
         # Применение цветовой карты
-        depth_colored = cv2.applyColorMap(depth_map, cv2.COLORMAP_MAGMA)
+        depth_colored = cv2.applyColorMap(depth_map_inverted, cv2.COLORMAP_TURBO)
 
         # Отображение результатов
         cv2.imshow('Оригинал', frame)
@@ -66,5 +69,4 @@ try:
 finally:
     # Очистка ресурсов
     cap.release()
-
     cv2.destroyAllWindows()
