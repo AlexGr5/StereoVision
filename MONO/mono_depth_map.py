@@ -66,4 +66,5 @@ try:
 finally:
     # Очистка ресурсов
     cap.release()
+
     cv2.destroyAllWindows()
