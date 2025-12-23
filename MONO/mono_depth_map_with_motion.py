@@ -31,6 +31,8 @@ class CleanDisplayDepthEstimator:
         
         # Предыдущий кадр в оттенках серого (для расчета оптического потока)
         self.prev_gray = None
+        # Предыдущий размер кадра
+        self.prev_size = None
         
         # Накопленный оптический поток для внутренней стабилизации (не отображается)
         self.accumulated_flow = None
@@ -66,26 +68,42 @@ class CleanDisplayDepthEstimator:
         
         # Инициализация при первом вызове функции
         if self.prev_gray is None:
-            self.prev_gray = gray
+            self.prev_gray = gray.copy()
+            self.prev_size = gray.shape[:2]
             # Инициализация матрицы накопленного потока (2 канала: dx, dy)
             self.accumulated_flow = np.zeros((gray.shape[0], gray.shape[1], 2), dtype=np.float32)
+            return None
+        
+        # Проверка, что размеры совпадают
+        if gray.shape != self.prev_gray.shape:
+            # Если размеры не совпадают, сбросим предыдущий кадр
+            self.prev_gray = gray.copy()
+            self.prev_size = gray.shape[:2]
+            self.accumulated_flow = np.zeros((gray.shape[0], gray.shape[1], 2), dtype=np.float32)
+            self.stable_depth = None
             return None
         
         # Проверка, двигалась ли камера в последние 1.5 секунды
         current_time = time.time()
         self.camera_moving = (current_time - self.last_move_time) < 1.5
         
-        # 1. Вычисление плотного оптического потока между кадрами
-        flow = cv2.calcOpticalFlowFarneback(
-            self.prev_gray, gray, None,  # Исходные и целевое изображения
-            0.5,  # Пирамидальное масштабирование (0.5 - каждый уровень в 2 раза меньше)
-            3,    # Количество уровней пирамиды
-            15,   # Размер окна для сглаживания
-            3,    # Количество итераций на каждом уровне пирамиды
-            5,    # Размер окна для вычисления стандартного отклонения
-            1.2,  # Флаг расширения окна
-            0     # Флаги алгоритма
-        )
+        try:
+            # 1. Вычисление плотного оптического потока между кадрами
+            flow = cv2.calcOpticalFlowFarneback(
+                self.prev_gray, gray, None,  # Исходные и целевое изображения
+                0.5,  # Пирамидальное масштабирование (0.5 - каждый уровень в 2 раза меньше)
+                3,    # Количество уровней пирамиды
+                15,   # Размер окна для сглаживания
+                3,    # Количество итераций на каждом уровне пирамиды
+                5,    # Размер окна для вычисления стандартного отклонения
+                1.2,  # Флаг расширения окна
+                0     # Флаги алгоритма
+            )
+        except cv2.error as e:
+            # Если возникает ошибка при вычислении оптического потока
+            print(f"Ошибка оптического потока: {e}")
+            self.prev_gray = gray.copy()
+            return None
         
         # 2. Оценка эго-движения камеры (глобального смещения) через RANSAC
         ego_motion_valid, expected_flow = self.estimate_ego_motion(flow)
@@ -122,7 +140,7 @@ class CleanDisplayDepthEstimator:
             display_depth = cv2.bilateralFilter(display_depth, 9, 75, 75)
             
             # Обновление предыдущего кадра для следующей итерации
-            self.prev_gray = gray
+            self.prev_gray = gray.copy()
             return display_depth
         
         # Если движение не валидно, но камера двигалась недавно - показываем стабильную карту
@@ -131,7 +149,7 @@ class CleanDisplayDepthEstimator:
             return cv2.bilateralFilter(self.stable_depth.copy(), 9, 75, 75)
         
         # Обновление предыдущего кадра при отсутствии валидного движения
-        self.prev_gray = gray
+        self.prev_gray = gray.copy()
         return None
     
     def estimate_ego_motion(self, flow):
@@ -154,6 +172,10 @@ class CleanDisplayDepthEstimator:
         # Получение размеров кадра
         h, w = flow.shape[:2]
         
+        # Проверка минимального размера кадра
+        if h < 50 or w < 50:
+            return False, np.zeros_like(flow)
+        
         # Создание равномерной сетки точек (шаг 16 пикселей)
         step = 16
         # Создание координатной сетки с шагом step, начиная с половины шага от края
@@ -161,8 +183,17 @@ class CleanDisplayDepthEstimator:
         # Преобразование в массив точек (координаты x, y)
         points = np.vstack((x_coords, y_coords)).T.astype(np.float32)
         
+        # Проверка, что точки находятся в пределах изображения
+        if len(points) == 0:
+            return False, np.zeros_like(flow)
+        
         # Выборка векторов потока в точках сетки
-        flow_vectors = flow[y_coords.astype(int), x_coords.astype(int)]
+        try:
+            flow_vectors = flow[y_coords.astype(int), x_coords.astype(int)]
+        except IndexError as e:
+            print(f"Ошибка индексации потока: {e}")
+            return False, np.zeros_like(flow)
+        
         # Вычисление ожидаемых позиций точек в следующем кадре
         next_points = points + flow_vectors.reshape(-1, 2)
         
@@ -170,14 +201,18 @@ class CleanDisplayDepthEstimator:
         if len(points) < self.min_inliers * 2:
             return False, np.zeros_like(flow)
         
-        # 3. Вычисление гомографии методом RANSAC для нахождения глобального преобразования
-        H, mask = cv2.findHomography(
-            points, next_points,  # Исходные и целевые точки
-            cv2.RANSAC,  # Метод RANSAC для устойчивой оценки
-            ransacReprojThreshold=3.0,  # Порог ошибки репроекции (в пикселях)
-            maxIters=2000,  # Максимальное количество итераций RANSAC
-            confidence=0.995  # Доверительная вероятность
-        )
+        try:
+            # 3. Вычисление гомографии методом RANSAC для нахождения глобального преобразования
+            H, mask = cv2.findHomography(
+                points, next_points,  # Исходные и целевые точки
+                cv2.RANSAC,  # Метод RANSAC для устойчивой оценки
+                ransacReprojThreshold=3.0,  # Порог ошибки репроекции (в пикселях)
+                maxIters=2000,  # Максимальное количество итераций RANSAC
+                confidence=0.995  # Доверительная вероятность
+            )
+        except cv2.error as e:
+            print(f"Ошибка поиска гомографии: {e}")
+            return False, np.zeros_like(flow)
         
         # Проверка успешности вычисления гомографии
         if H is None or mask is None:
@@ -190,19 +225,23 @@ class CleanDisplayDepthEstimator:
             return False, np.zeros_like(flow)
         
         # Создание координатной сетки для всего кадра
-        coords = np.array([[x, y] for y in range(h) for x in range(w)], dtype=np.float32)
-        
-        # Применение гомографии ко всем точкам кадра
-        warped_coords = cv2.perspectiveTransform(
-            coords.reshape(-1, 1, 2), H
-        ).reshape(-1, 2)
-        
-        # Вычисление ожидаемого потока для всего кадра
-        expected_flow = warped_coords - coords
-        # Преобразование в исходную форму (H, W, 2)
-        expected_flow = expected_flow.reshape(h, w, 2)
-        
-        return True, expected_flow
+        try:
+            coords = np.array([[x, y] for y in range(h) for x in range(w)], dtype=np.float32)
+            
+            # Применение гомографии ко всем точкам кадра
+            warped_coords = cv2.perspectiveTransform(
+                coords.reshape(-1, 1, 2), H
+            ).reshape(-1, 2)
+            
+            # Вычисление ожидаемого потока для всего кадра
+            expected_flow = warped_coords - coords
+            # Преобразование в исходную форму (H, W, 2)
+            expected_flow = expected_flow.reshape(h, w, 2)
+            
+            return True, expected_flow
+        except Exception as e:
+            print(f"Ошибка при вычислении ожидаемого потока: {e}")
+            return False, np.zeros_like(flow)
 
 
 def run_display_estimator():
@@ -225,7 +264,11 @@ def run_display_estimator():
         # Захват кадра с камеры
         ret, frame = estimator.cap.read()
         if not ret:
+            print("Ошибка чтения кадра с камеры")
             break
+        
+        # Изменение размера кадра для стабильности
+        frame = cv2.resize(frame, (640, 480))
         
         # Получение карты глубины для текущего кадра
         depth_map = estimator.get_depth_map(frame)
@@ -237,7 +280,10 @@ def run_display_estimator():
             max_val = np.percentile(depth_map, 97)  # 97-й процентиль (отсекаем слишком яркие)
             
             # Нормализация к диапазону [0, 1] с обрезкой выбросов
-            depth_vis = np.clip((depth_map - min_val) / (max_val - min_val), 0, 1)
+            if max_val > min_val:
+                depth_vis = np.clip((depth_map - min_val) / (max_val - min_val), 0, 1)
+            else:
+                depth_vis = np.zeros_like(depth_map)
             
             # Конвертация в 8-битное изображение (0-255)
             depth_vis = (depth_vis * 255).astype(np.uint8)
