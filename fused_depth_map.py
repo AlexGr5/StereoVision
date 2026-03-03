@@ -1873,77 +1873,107 @@ def display_fusion_params_panel(occlusion_state='none', left_score=0.0, right_sc
     cv2.imshow('Fusion Parameters', panel)
 
 
-def draw_depth_legend(img, min_depth=0, max_depth=255, position='right'):
+def draw_depth_legend_meters(img, stereo_calib, fused_depth_uint8, position='right'):
     """
-    Отрисовка цветовой шкалы дальности на карте глубины.
-    Использует COLORMAP_JET для точного соответствия цветов с картой глубины.
+    Отрисовка цветовой шкалы дальности в МЕТРАХ на карте глубины.
+    ЦВЕТА И ЗНАЧЕНИЯ ДИНАМИЧЕСКИЕ — соответствуют текущему кадру!
     
-    ПАРАМЕТРЫ:
-    ----------
-    img : np.ndarray
-        Изображение карты глубины для модификации
-    min_depth : float
-        Минимальное значение глубины в текущем кадре
-    max_depth : float
-        Максимальное значение глубины в текущем кадре
-    position : str
-        Позиция легенды: 'right' или 'bottom'
+    ФОРМУЛА: depth_meters = (focal_length_pixels × baseline_meters) / disparity_pixels
+    
+    ВАЖНО: baseline из калибровки в САНТИМЕТРАХ (square_size=2.65 см)!
     """
     h, w = img.shape[:2]
     
-    # Параметры легенды
-    legend_width = 40 if position == 'right' else w - 40
-    legend_height = h - 40 if position == 'right' else 40
-    legend_x = w - legend_width - 10 if position == 'right' else 20
-    legend_y = 20 if position == 'right' else h - legend_height - 10
+    # === ПОЛУЧЕНИЕ ПАРАМЕТРОВ ИЗ stereo_calib ===
+    focal_length = stereo_calib.get('focal_length', 500)    # пиксели (масштабированное)
+    baseline_cm = stereo_calib.get('baseline', 6.0)         # САНТИМЕТРЫ (из T[0,0])
     
-    # === ИСПРАВЛЕНИЕ 1: Создаём градиент через COLORMAP_JET для точного совпадения ===
+    # === ИСПРАВЛЕНИЕ 1: Конвертация baseline из см в метры ===
+    baseline_m = baseline_cm / 100.0  # 6 см → 0.06 м
+    
+    # === ИСПРАВЛЕНИЕ 2: Калибровочный коэффициент для коррекции систематической ошибки ===
+    # Эмпирический коэффициент для компенсации ошибок калибровки/масштабирования
+    # Если показывает в 4 раза ближе — нужно умножить глубину на 4
+    CALIBRATION_SCALE = 3.75  # Подбирается экспериментально под вашу систему
+    
+    # Параметры диспаритета из глобальных констант
+    num_disparities = NUM_DISP_BASE           # = 320 (16 * 20)
+    min_disparity = MIN_DISP_BASE             # = 0
+    
+    # Параметры легенды
+    legend_width = 55
+    legend_height = h - 40
+    legend_x = w - legend_width - 10
+    legend_y = 20
+    
+    # === ДИНАМИЧЕСКОЕ ОПРЕДЕЛЕНИЕ ДИАПАЗОНА В ТЕКУЩЕМ КАДРЕ ===
+    valid_depth = fused_depth_uint8[fused_depth_uint8 > 0]
+    
+    if len(valid_depth) > 0:
+        norm_min = max(1, np.min(valid_depth))   # Самое далёкое [0-255]
+        norm_max = max(1, np.max(valid_depth))   # Самое близкое [0-255]
+    else:
+        norm_min = 1
+        norm_max = 255
+    
+    # === КОНВЕРТАЦИЯ НОРМАЛИЗОВАННЫХ [0-255] В ПИКСЕЛИ ДИСПАРИТЕТА ===
+    disp_min = min_disparity + (norm_min / 255.0) * num_disparities
+    disp_max = min_disparity + (norm_max / 255.0) * num_disparities
+    
+    # Защита от деления на ноль
+    disp_min = max(0.5, disp_min)
+    disp_max = max(0.5, disp_max)
+    
+    # === КОНВЕРТАЦИЯ ДИСПАРИТЕТА В МЕТРЫ (С КАЛИБРОВОЧНЫМ КОЭФФИЦИЕНТОМ) ===
+    max_depth_m = ((focal_length * baseline_m) / disp_min) * CALIBRATION_SCALE
+    min_depth_m = ((focal_length * baseline_m) / disp_max) * CALIBRATION_SCALE
+    
+    # Ограничиваем разумными значениями
+    max_depth_m = min(max_depth_m, 30.0)   # максимум 30 метров
+    min_depth_m = max(min_depth_m, 0.05)   # минимум 5 см
+    
+    # === СОЗДАНИЕ ДИНАМИЧЕСКОГО ГРАДИЕНТА ===
     gradient_bar = np.zeros((legend_height, legend_width), dtype=np.uint8)
     
-    if position == 'right':
-        # Вертикальный градиент: сверху=далеко(синий), снизу=близко(красный)
-        for i in range(legend_height):
-            ratio = i / legend_height  # 0 = верх, 1 = низ
-            gradient_bar[i, :] = int(ratio * 255)
-    else:
-        # Горизонтальный градиент: слева=далеко, справа=близко
-        for i in range(legend_width):
-            ratio = i / legend_width  # 0 = лево, 1 = право
-            gradient_bar[:, i] = int(ratio * 255)
+    for i in range(legend_height):
+        ratio = i / legend_height
+        gradient_value = norm_min + ratio * (norm_max - norm_min)
+        gradient_bar[i, :] = int(np.clip(gradient_value, 0, 255))
     
-    # Применяем ту же цветовую карту что и для глубины (COLORMAP_JET)
     gradient_colored = cv2.applyColorMap(gradient_bar, cv2.COLORMAP_JET)
-    
-    # Отрисовка градиента на изображении
     img[legend_y:legend_y+legend_height, legend_x:legend_x+legend_width] = gradient_colored
     
-    # Отрисовка белой рамки
+    # Рамка
     cv2.rectangle(img, (legend_x, legend_y), 
                   (legend_x + legend_width, legend_y + legend_height), 
                   (255, 255, 255), 1)
     
-    # === ИСПРАВЛЕНИЕ 2: Добавляем пояснение что это пиксели диспаритета ===
-    if position == 'right':
-        # Текстовые метки с единицами измерения
-        cv2.putText(img, "БЛИЗКО", (legend_x - 85, legend_y + legend_height - 5),
-                    cv2.FONT_HERSHEY_COMPLEX, 0.45, (0, 255, 0), 1)
-        cv2.putText(img, "ДАЛЕКО", (legend_x - 85, legend_y + 18),
-                    cv2.FONT_HERSHEY_COMPLEX, 0.45, (0, 0, 255), 1)
-        
-        # Числовые значения с пояснением единиц
-        cv2.putText(img, f"{max_depth:.0f} px", (legend_x + 2, legend_y + legend_height - 8),
-                    cv2.FONT_HERSHEY_COMPLEX, 0.35, (255, 255, 255), 1)
-        cv2.putText(img, f"{min_depth:.0f} px", (legend_x + 2, legend_y + 13),
-                    cv2.FONT_HERSHEY_COMPLEX, 0.35, (255, 255, 255), 1)
-        
-        # === НОВОЕ: Поясняющая подпись ===
-        cv2.putText(img, "DISP", (legend_x + 5, legend_y + legend_height // 2),
-                    cv2.FONT_HERSHEY_COMPLEX, 0.3, (200, 200, 200), 1)
-    else:
-        cv2.putText(img, "ДАЛЕКО", (legend_x + 5, legend_y + 15),
-                    cv2.FONT_HERSHEY_COMPLEX, 0.4, (255, 255, 255), 1)
-        cv2.putText(img, "БЛИЗКО", (legend_x + legend_width - 70, legend_y + 15),
-                    cv2.FONT_HERSHEY_COMPLEX, 0.4, (255, 255, 255), 1)
+    # === ТЕКСТОВЫЕ МЕТКИ ===
+    cv2.putText(img, "МЕТРЫ", (legend_x - 70, legend_y - 5),
+                cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 0), 1)
+    
+    # Далеко (синий, верх)
+    cv2.putText(img, "ДАЛЕКО", (legend_x - 85, legend_y + 18),
+                cv2.FONT_HERSHEY_COMPLEX, 0.4, (200, 50, 50), 1)
+    cv2.putText(img, f"{max_depth_m:.2f} м", (legend_x + 2, legend_y + 13),
+                cv2.FONT_HERSHEY_COMPLEX, 0.35, (255, 255, 255), 1)
+    
+    # Близко (красный, низ)
+    cv2.putText(img, "БЛИЗКО", (legend_x - 85, legend_y + legend_height - 5),
+                cv2.FONT_HERSHEY_COMPLEX, 0.4, (50, 200, 50), 1)
+    cv2.putText(img, f"{min_depth_m:.2f} м", (legend_x + 2, legend_y + legend_height - 8),
+                cv2.FONT_HERSHEY_COMPLEX, 0.35, (255, 255, 255), 1)
+    
+    # Диапазон диспаритета + калибровочный коэффициент
+    cv2.putText(img, f"d:{disp_min:.0f}-{disp_max:.0f}px", 
+                (legend_x + 2, legend_y + legend_height//2),
+                cv2.FONT_HERSHEY_COMPLEX, 0.25, (150, 150, 150), 1)
+    cv2.putText(img, f"cal={CALIBRATION_SCALE:.2f}x", 
+                (legend_x + 2, legend_y + legend_height//2 + 12),
+                cv2.FONT_HERSHEY_COMPLEX, 0.25, (150, 150, 150), 1)
+    cv2.putText(img, f"b={baseline_cm:.1f}см", 
+                (legend_x + 2, legend_y + legend_height//2 + 24),
+                cv2.FONT_HERSHEY_COMPLEX, 0.25, (150, 150, 150), 1)
     
     return img
 
@@ -2896,14 +2926,13 @@ def main():
                         2
                     )
                 
-                # ОТРИСОВКА ШКАЛЫ ДАЛЬНОСТИ (ЕСЛИ ВКЛЮЧЕНА):
-                if show_depth_legend and fused_depth_uint8 is not None:
-                    min_val = np.min(fused_depth_uint8)
-                    max_val = np.max(fused_depth_uint8)
-                    fused_colormap = draw_depth_legend(
-                        fused_colormap.copy(),  # Копия для безопасности
-                        min_depth=min_val,
-                        max_depth=max_val,
+                # ОТРИСОВКА ШКАЛЫ ДАЛЬНОСТИ В МЕТРАХ (ЕСЛИ ВКЛЮЧЕНА):
+                if show_depth_legend and stereo_calib is not None and fused_depth_uint8 is not None:
+                    # Копия для безопасности (чтобы не портить оригинал)
+                    fused_colormap = draw_depth_legend_meters(
+                        fused_colormap.copy(),
+                        stereo_calib,
+                        fused_depth_uint8,
                         position='right'
                     )
                 
