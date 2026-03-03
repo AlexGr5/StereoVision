@@ -1872,6 +1872,82 @@ def display_fusion_params_panel(occlusion_state='none', left_score=0.0, right_sc
     # ОТОБРАЖЕНИЕ ПАНЕЛИ
     cv2.imshow('Fusion Parameters', panel)
 
+
+def draw_depth_legend(img, min_depth=0, max_depth=255, position='right'):
+    """
+    Отрисовка цветовой шкалы дальности на карте глубины.
+    Использует COLORMAP_JET для точного соответствия цветов с картой глубины.
+    
+    ПАРАМЕТРЫ:
+    ----------
+    img : np.ndarray
+        Изображение карты глубины для модификации
+    min_depth : float
+        Минимальное значение глубины в текущем кадре
+    max_depth : float
+        Максимальное значение глубины в текущем кадре
+    position : str
+        Позиция легенды: 'right' или 'bottom'
+    """
+    h, w = img.shape[:2]
+    
+    # Параметры легенды
+    legend_width = 40 if position == 'right' else w - 40
+    legend_height = h - 40 if position == 'right' else 40
+    legend_x = w - legend_width - 10 if position == 'right' else 20
+    legend_y = 20 if position == 'right' else h - legend_height - 10
+    
+    # === ИСПРАВЛЕНИЕ 1: Создаём градиент через COLORMAP_JET для точного совпадения ===
+    gradient_bar = np.zeros((legend_height, legend_width), dtype=np.uint8)
+    
+    if position == 'right':
+        # Вертикальный градиент: сверху=далеко(синий), снизу=близко(красный)
+        for i in range(legend_height):
+            ratio = i / legend_height  # 0 = верх, 1 = низ
+            gradient_bar[i, :] = int(ratio * 255)
+    else:
+        # Горизонтальный градиент: слева=далеко, справа=близко
+        for i in range(legend_width):
+            ratio = i / legend_width  # 0 = лево, 1 = право
+            gradient_bar[:, i] = int(ratio * 255)
+    
+    # Применяем ту же цветовую карту что и для глубины (COLORMAP_JET)
+    gradient_colored = cv2.applyColorMap(gradient_bar, cv2.COLORMAP_JET)
+    
+    # Отрисовка градиента на изображении
+    img[legend_y:legend_y+legend_height, legend_x:legend_x+legend_width] = gradient_colored
+    
+    # Отрисовка белой рамки
+    cv2.rectangle(img, (legend_x, legend_y), 
+                  (legend_x + legend_width, legend_y + legend_height), 
+                  (255, 255, 255), 1)
+    
+    # === ИСПРАВЛЕНИЕ 2: Добавляем пояснение что это пиксели диспаритета ===
+    if position == 'right':
+        # Текстовые метки с единицами измерения
+        cv2.putText(img, "БЛИЗКО", (legend_x - 85, legend_y + legend_height - 5),
+                    cv2.FONT_HERSHEY_COMPLEX, 0.45, (0, 255, 0), 1)
+        cv2.putText(img, "ДАЛЕКО", (legend_x - 85, legend_y + 18),
+                    cv2.FONT_HERSHEY_COMPLEX, 0.45, (0, 0, 255), 1)
+        
+        # Числовые значения с пояснением единиц
+        cv2.putText(img, f"{max_depth:.0f} px", (legend_x + 2, legend_y + legend_height - 8),
+                    cv2.FONT_HERSHEY_COMPLEX, 0.35, (255, 255, 255), 1)
+        cv2.putText(img, f"{min_depth:.0f} px", (legend_x + 2, legend_y + 13),
+                    cv2.FONT_HERSHEY_COMPLEX, 0.35, (255, 255, 255), 1)
+        
+        # === НОВОЕ: Поясняющая подпись ===
+        cv2.putText(img, "DISP", (legend_x + 5, legend_y + legend_height // 2),
+                    cv2.FONT_HERSHEY_COMPLEX, 0.3, (200, 200, 200), 1)
+    else:
+        cv2.putText(img, "ДАЛЕКО", (legend_x + 5, legend_y + 15),
+                    cv2.FONT_HERSHEY_COMPLEX, 0.4, (255, 255, 255), 1)
+        cv2.putText(img, "БЛИЗКО", (legend_x + legend_width - 70, legend_y + 15),
+                    cv2.FONT_HERSHEY_COMPLEX, 0.4, (255, 255, 255), 1)
+    
+    return img
+
+
 # ============================================================================
 # ГЛАВНАЯ ФУНКЦИЯ — ТОЧКА ВХОДА В ПРОГРАММУ
 # ============================================================================
@@ -2042,6 +2118,7 @@ def main():
     show_flow_depth = False        # Показывать ли карту глубины оптического потока
     show_fused_depth = True        # Показывать ли итоговую фьюжн-карту глубины
     show_fusion_panel = True       # Показывать ли панель параметров фьюжна
+    show_depth_legend = True       # Показывать ли шкалу дальности на фьюжн-карте
     
     # ============================================================================
     # КРИТИЧЕСКИ ВАЖНАЯ ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ ДЕТЕКТОРА ПЕРЕКРЫТИЯ
@@ -2108,6 +2185,7 @@ def main():
     print("'3'  - переключить визуализацию карты глубины оптического потока")
     print("'4'  - переключить ИТОГОВУЮ фьюжн-карту глубины (рекомендуется)")
     print("'5'  - показать/скрыть панель параметров фьюжна")
+    print("'l'  - показать/скрыть шкалу дальности (легенду) на фьюжн-карте")
     print("'z'  - ВКЛ/ВЫКЛ метод СТЕРЕОЗРЕНИЯ (останавливает вычисления)")
     print("'m'  - ВКЛ/ВЫКЛ метод MiDaS (только если доступен PyTorch)")
     print("'o'  - ВКЛ/ВЫКЛ метод оптического потока")
@@ -2708,10 +2786,10 @@ def main():
             
             # ФОРМИРОВАНИЕ МНОГОСТРОЧНОЙ ИНСТРУКЦИИ:
             instruction_text = (
-                "'q'-выход | 'c'-сохранить | 'v'-ректиф | "
-                "'z'-стереометод | 'm'-MiDaS | 'o'-поток | "
-                "'1/2/3/4'-карты | '5'-панель | 'p'-сброс | "
-                "'+/- масштаб' | настройки:w/s/e/d/r/f/t/g/y/h"
+                 "'q'-выход | 'c'-сохранить | 'v'-ректиф |  "
+                 "'z'-стереометод | 'm'-MiDaS | 'o'-поток |  "
+                 "'1/2/3/4'-карты | '5'-панель | 'l'-легенда |  "
+                 "'p'-сброс | '+/- масштаб' | настройки:w/s/e/d/r/f/t/g/y/h "
             )
             
             # ВЫЗОВ ФУНКЦИИ МНОГОСТРОЧНОГО ТЕКСТА С АВТОМАТИЧЕСКИМ ПЕРЕНОСОМ СЛОВ:
@@ -2806,7 +2884,7 @@ def main():
                 # ДОПОЛНИТЕЛЬНАЯ ИНДИКАЦИЯ РЕЗЕРВНОГО РЕЖИМА ПРИ ПЕРЕКРЫТИИ:
                 if occlusion_state in ['left', 'right']:
                     occlusion_text = (
-                        f"РЕЗЕРВНЫЙ РЕЖИМ: {'правая' if occlusion_state == 'left' else 'левая'} камера"
+                        f"РЕЗЕРВНЫЙ РЕЖИМ: {'правая' if occlusion_state == 'left' else 'левая'} камера "
                     )
                     cv2.putText(
                         fused_colormap,
@@ -2817,6 +2895,18 @@ def main():
                         (0, 165, 255),  # Оранжевый цвет
                         2
                     )
+                
+                # ОТРИСОВКА ШКАЛЫ ДАЛЬНОСТИ (ЕСЛИ ВКЛЮЧЕНА):
+                if show_depth_legend and fused_depth_uint8 is not None:
+                    min_val = np.min(fused_depth_uint8)
+                    max_val = np.max(fused_depth_uint8)
+                    fused_colormap = draw_depth_legend(
+                        fused_colormap.copy(),  # Копия для безопасности
+                        min_depth=min_val,
+                        max_depth=max_val,
+                        position='right'
+                    )
+                
                 # macOS FIX: установка обработчика клика
                 if sys.platform == 'darwin' and frame_counter == 1:
                     cv2.namedWindow('FUSED Depth', cv2.WINDOW_NORMAL)
@@ -2937,6 +3027,11 @@ def main():
                     # Закрытие окна панели при отключении
                     cv2.destroyWindow('Fusion Parameters')
                 print(f"Панель параметров фьюжна: {'ВКЛ' if show_fusion_panel else 'ВЫКЛ'}")
+            
+            # ПЕРЕКЛЮЧЕНИЕ ШКАЛЫ ДАЛЬНОСТИ (ЛЕГЕНДЫ):
+            elif key == ord('l'):
+                show_depth_legend = not show_depth_legend
+                print(f"Шкала дальности: {'ВКЛ' if show_depth_legend else 'ВЫКЛ'} ")
             
             # ПЕРЕКЛЮЧЕНИЕ МЕТОДА MiDaS (только если доступен):
             elif key == ord('m') and TORCH_AVAILABLE:
