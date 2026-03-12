@@ -3181,37 +3181,29 @@ def main():
             # ПЕРЕКЛЮЧЕНИЕ ВИЗУАЛИЗАЦИИ СТЕРЕОГЛУБИНЫ:
             elif key == ord('1'):
                 show_depth = not show_depth
-                if show_depth:  # При включении — отключаем другие визуализации
-                    show_midas_depth = False
-                    show_flow_depth = False
-                    show_fused_depth = False
+                if not show_depth:
+                    cv2.destroyWindow('Depth map')
                 print(f"Визуализация стереоглубины: {'ВКЛ' if show_depth else 'ВЫКЛ'}")
             
             # ПЕРЕКЛЮЧЕНИЕ ВИЗУАЛИЗАЦИИ ГЛУБИНЫ MiDaS:
             elif key == ord('2'):
                 show_midas_depth = not show_midas_depth
-                if show_midas_depth:
-                    show_depth = False
-                    show_flow_depth = False
-                    show_fused_depth = False
+                if not show_midas_depth:
+                    cv2.destroyWindow('MiDaS Depth')
                 print(f"MiDaS карта глубины: {'ВКЛ' if show_midas_depth else 'ВЫКЛ'}")
             
             # ПЕРЕКЛЮЧЕНИЕ ВИЗУАЛИЗАЦИИ ГЛУБИНЫ ОПТИЧЕСКОГО ПОТОКА:
             elif key == ord('3'):
                 show_flow_depth = not show_flow_depth
-                if show_flow_depth:
-                    show_depth = False
-                    show_midas_depth = False
-                    show_fused_depth = False
+                if not show_flow_depth:
+                    cv2.destroyWindow('Flow Depth')
                 print(f"Карта оптического потока: {'ВКЛ' if show_flow_depth else 'ВЫКЛ'}")
             
             # ПЕРЕКЛЮЧЕНИЕ ВИЗУАЛИЗАЦИИ ИТОГОВОЙ ФЬЮЖН-КАРТЫ:
             elif key == ord('4'):
                 show_fused_depth = not show_fused_depth
-                if show_fused_depth:
-                    show_depth = False
-                    show_midas_depth = False
-                    show_flow_depth = False
+                if not show_fused_depth:
+                    cv2.destroyWindow('FUSED Depth')
                 print(f"Итоговая фьюжн-карта: {'ВКЛ' if show_fused_depth else 'ВЫКЛ'}")
             
             # ПЕРЕКЛЮЧЕНИЕ ПАНЕЛИ ПАРАМЕТРОВ ФЬЮЖНА:
